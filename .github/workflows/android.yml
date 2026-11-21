@@ -3,12 +3,12 @@ name: Brownux Build
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch: # Manuel tetikleme butonu
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 360 # Servo derlemesi uzun sürebilir, 6 saat limit koyduk
+    timeout-minutes: 360
 
     steps:
     - name: Kodu İndir
@@ -20,7 +20,7 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
-    - name: Android SDK Kur (Hata veren kısım düzeltildi)
+    - name: Android SDK Kur
       uses: android-actions/setup-android@v3
 
     - name: Rust Kur ve Android Hedeflerini Ekle
@@ -35,11 +35,9 @@ jobs:
 
     - name: Rust Kütüphanesini Derle (Servo Motoru)
       run: |
-        # NDK'daki Clang derleyicisini Rust'a tanıtıyoruz
         export NDK_BIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
         export CC_aarch64_linux_android=$NDK_BIN/aarch64-linux-android26-clang
         export AR_aarch64_linux_android=$NDK_BIN/llvm-ar
-        
         cargo build --release --target aarch64-linux-android
 
     - name: Derlenen .so Dosyasını Android'e Kopyala

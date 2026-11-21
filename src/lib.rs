@@ -4,7 +4,7 @@ use jni::objects::{JClass, JString};
 use jni::sys::jlong;
 use jni::JNIEnv;
 use servo::WebViewBuilder;
-use servo::servo::Servo;
+use servo::Servo;
 use std::sync::Mutex;
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeInit(
         android_logger::Config::default().with_max_level(log::LevelFilter::Info),
     );
 
-    let servo = Arc::new(servo::servo::ServoBuilder::default().build());
+    let servo = Arc::new(servo::ServoBuilder::default().build());
     let mut lock = SERVO.lock().unwrap();
     *lock = Some(servo.clone());
 

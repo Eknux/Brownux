@@ -46,8 +46,9 @@ jobs:
         export CXX_aarch64_linux_android=$NDK_BIN/aarch64-linux-android26-clang++
         export AR_aarch64_linux_android=$NDK_BIN/llvm-ar
         
-        # İŞTE BURASI: Kavga eden kütüphaneleri güncelliyoruz
-        cargo update -p rmp-serde
+        # Kavga eden kütüphaneleri barıştırıyoruz (sürümlerini sabitliyoruz)
+        cargo update -p rmp-serde --precise 0.15.5
+        cargo update -p rmp --precise 0.8.15
         
         cargo build --release --target aarch64-linux-android
 

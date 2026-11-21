@@ -5,7 +5,7 @@ use jni::sys::jlong;
 use jni::JNIEnv;
 use servo::WebViewBuilder;
 use servo::servo::Servo;
-use once_cell::sync::Mutex;
+use std::sync::Mutex;
 use std::sync::Arc;
 
 static SERVO: once_cell::sync::Lazy<Mutex<Option<Arc<Servo>>>> =

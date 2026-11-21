@@ -5,6 +5,8 @@
 
     <application
         android:label="Brownux"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Material3.DynamicColors.DayNight">
         <activity
             android:name=".MainActivity"

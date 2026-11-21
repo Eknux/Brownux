@@ -16,7 +16,7 @@ static ADBLOCK_ENGINE: Lazy<Engine> = Lazy::new(|| {
 });
 
 pub fn should_block(url: &str, resource_type: &str) -> bool {
-    let request = AdblockRequest::new(url, resource_type, "")
+    let request = AdblockRequest::new(url, url, resource_type)
         .expect("Geçersiz adblock isteği");
     ADBLOCK_ENGINE.check_network_request(&request).matched
 }

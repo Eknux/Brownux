@@ -20,7 +20,7 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
-    - name: Android SDK Kur
+    - name: Android SDK Kur (Hata veren kısım düzeltildi)
       uses: android-actions/setup-android@v3
 
     - name: Rust Kur ve Android Hedeflerini Ekle

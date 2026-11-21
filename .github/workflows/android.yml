@@ -20,6 +20,11 @@ jobs:
         distribution: 'zulu'
         java-version: '17'
 
+    - name: Gradle 8.2 Kur
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: 8.2
+
     - name: Rust Kur ve Android Hedeflerini Ekle
       uses: dtolnay/rust-toolchain@stable
       with:
@@ -64,8 +69,7 @@ jobs:
     - name: Android APK Derle
       run: |
         cd android
-        gradle wrapper --gradle-version 8.2
-        ./gradlew assembleDebug
+        gradle assembleDebug --stacktrace
 
     - name: APK'yı Yükle (İndirilebilir Yap)
       uses: actions/upload-artifact@v4

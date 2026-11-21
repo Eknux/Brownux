@@ -3,13 +3,8 @@ mod adblock;
 use jni::objects::{JClass, JString};
 use jni::sys::jlong;
 use jni::JNIEnv;
-use servo::WebViewBuilder;
 use servo::Servo;
-use std::sync::Mutex;
 use std::sync::Arc;
-
-static SERVO: once_cell::sync::Lazy<Mutex<Option<Arc<Servo>>>> =
-    once_cell::sync::Lazy::new(|| Mutex::new(None));
 
 #[no_mangle]
 pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeInit(
@@ -21,9 +16,6 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeInit(
     );
 
     let servo = Arc::new(servo::ServoBuilder::default().build());
-    let mut lock = SERVO.lock().unwrap();
-    *lock = Some(servo.clone());
-
     Arc::into_raw(servo) as jlong
 }
 
@@ -46,10 +38,6 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeLoadUrl(
         return;
     }
 
-    let servo: &Servo = unsafe { &*(servo_ptr as *const Servo) };
-    let _webview = WebViewBuilder::new(servo)
-        .url(url_str.parse().expect("Geçersiz URL"))
-        .build();
-
-    log::info!("Brownux yüklüyor: {}", url_str);
+    // GEÇİCİ: WebView henüz yok, ekran (Surface) bağlanınca eklenecek
+    log::info!("Brownux yüklenecek: {}", url_str);
 }

@@ -1,4 +1,5 @@
-use adblock::engine::Engine;
+use adblock::Engine;
+use adblock::lists::ParseOptions;
 use adblock::lists::FilterSet;
 use adblock::request::Request as AdblockRequest;
 use once_cell::sync::Lazy;
@@ -10,7 +11,7 @@ static ADBLOCK_ENGINE: Lazy<Engine> = Lazy::new(|| {
         "-ad-",
         "/ads/*",
         "||doubleclick.net^",
-    ], true);
+    ], ParseOptions::default());
     Engine::from_filter_set(filter_set, true)
 });
 

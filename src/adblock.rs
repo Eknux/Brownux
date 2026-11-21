@@ -1,22 +1,26 @@
-use adblock::Engine;
-use adblock::lists::ParseOptions;
-use adblock::lists::FilterSet;
+use adblock::lists::{FilterSet, ParseOptions};
 use adblock::request::Request as AdblockRequest;
-use once_cell::sync::Lazy;
+use adblock::Engine;
 
-static ADBLOCK_ENGINE: Lazy<Engine> = Lazy::new(|| {
+fn build_engine() -> Engine {
     let mut filter_set = FilterSet::new(true);
     // Örnek filtre listesi (Gerçekte EasyList dosyasından okunur)
-    filter_set.add_filters(&[
-        "-ad-",
-        "/ads/*",
-        "||doubleclick.net^",
-    ], ParseOptions::default());
+    filter_set.add_filters(
+        &["-ad-", "/ads/*", "||doubleclick.net^"],
+        ParseOptions::default(),
+    );
     Engine::from_filter_set(filter_set, true)
-});
+}
+
+// Her thread kendi motorunu tutar, böylece Sync gerekmez
+thread_local! {
+    static ADBLOCK_ENGINE: Engine = build_engine();
+}
 
 pub fn should_block(url: &str, resource_type: &str) -> bool {
-    let request = AdblockRequest::new(url, url, resource_type)
-        .expect("Geçersiz adblock isteği");
-    ADBLOCK_ENGINE.check_network_request(&request).matched
+    let request = match AdblockRequest::new(url, url, resource_type) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    ADBLOCK_ENGINE.with(|engine| engine.check_network_request(&request).matched)
 }

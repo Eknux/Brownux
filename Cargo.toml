@@ -1,0 +1,15 @@
+[package]
+name = "brownux"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+servo = { git = "https://github.com/servo/servo", branch = "main" }
+jni = "0.21"
+adblock = "0.9"
+once_cell = "1.19"
+log = "0.4"
+android_logger = "0.14"

@@ -3,8 +3,9 @@ mod adblock;
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use dpi::PhysicalSize;
 use jni::objects::{JClass, JObject, JString};
@@ -53,6 +54,7 @@ struct Delegate {
 
 impl WebViewDelegate for Delegate {
     fn notify_new_frame_ready(&self, _: WebView) {
+        log::info!("BRW: frame ready");
         self.dirty.set(true);
     }
 }
@@ -69,19 +71,28 @@ fn create(window: NativeWindow, w: u32, h: u32, url: &str, tx: &Sender<Cmd>) -> 
     let size = PhysicalSize::new(w, h);
     let rc = {
         let wh = window.window_handle().ok()?;
-        Rc::new(WindowRenderingContext::new(DisplayHandle::android(), wh, size).ok()?)
+        match WindowRenderingContext::new(DisplayHandle::android(), wh, size) {
+            Ok(c) => Rc::new(c),
+            Err(_) => {
+                log::error!("BRW: WindowRenderingContext olusmadi");
+                return None;
+            }
+        }
     };
     let _ = rc.make_current();
+    log::info!("BRW: rendering context hazir");
 
     let servo = ServoBuilder::default()
         .event_loop_waker(Box::new(Waker(tx.clone())))
         .build();
+    log::info!("BRW: servo hazir");
 
     let dirty = Rc::new(Cell::new(false));
     let webview = WebViewBuilder::new(&servo, rc.clone())
         .url(Url::parse(url).ok()?)
         .delegate(Rc::new(Delegate { dirty: dirty.clone() }))
         .build();
+    log::info!("BRW: webview hazir, url={}", url);
 
     Some(State { webview, servo, rc, dirty, _window: window })
 }
@@ -89,24 +100,26 @@ fn create(window: NativeWindow, w: u32, h: u32, url: &str, tx: &Sender<Cmd>) -> 
 fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
     let mut state: Option<State> = None;
     let mut url = String::from("https://servo.org");
+    let mut ticks: u64 = 0;
 
-    while let Ok(cmd) = rx.recv() {
-        match cmd {
-            Cmd::Surface(win, w, h) => {
+    loop {
+        match rx.recv_timeout(Duration::from_millis(16)) {
+            Ok(Cmd::Surface(win, w, h)) => {
+                log::info!("BRW: surface {}x{}", w, h);
                 state = None;
                 state = create(win, w, h, &url, &tx);
-                if state.is_none() {
-                    log::error!("Brownux: Servo olusturulamadi");
-                }
+                log::info!("BRW: state olustu = {}", state.is_some());
             }
-            Cmd::Resize(w, h) => {
+            Ok(Cmd::Resize(w, h)) => {
+                log::info!("BRW: resize {}x{}", w, h);
                 if let Some(s) = &state {
                     let size = PhysicalSize::new(w, h);
                     s.rc.resize(size);
                     s.webview.resize(size);
                 }
             }
-            Cmd::Load(u) => {
+            Ok(Cmd::Load(u)) => {
+                log::info!("BRW: load {}", u);
                 url = u.clone();
                 if let Some(s) = &state {
                     if let Ok(parsed) = Url::parse(&u) {
@@ -114,8 +127,18 @@ fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
                     }
                 }
             }
-            Cmd::Destroy => state = None,
-            Cmd::Tick => {}
+            Ok(Cmd::Destroy) => {
+                log::info!("BRW: destroy");
+                state = None;
+            }
+            Ok(Cmd::Tick) => {}
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+
+        ticks += 1;
+        if ticks % 120 == 0 {
+            log::info!("BRW: dongu canli, tick {}", ticks);
         }
 
         if let Some(s) = &state {
@@ -123,6 +146,7 @@ fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
             if s.dirty.replace(false) {
                 s.webview.paint();
                 s.rc.present();
+                log::info!("BRW: paint+present");
             }
         }
     }
@@ -136,6 +160,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeInit(
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Info),
     );
+    std::panic::set_hook(Box::new(|info| log::error!("BRW PANIC: {}", info)));
 
     let mut guard = TX.lock().unwrap();
     if guard.is_none() {
@@ -161,7 +186,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeLoadUrl(
     let url_str: String = env.get_string(&url).unwrap().into();
 
     if adblock::should_block(&url_str, "document") {
-        log::warn!("Brownux ana dokumani engelledi: {}", url_str);
+        log::warn!("BRW: ana dokuman engellendi: {}", url_str);
         return;
     }
     send(Cmd::Load(url_str));
@@ -190,7 +215,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeSurfaceChanged(
         HAS_SURFACE.store(true, Ordering::SeqCst);
         send(Cmd::Surface(window, w, h));
     } else {
-        log::error!("Brownux: Surface -> ANativeWindow basarisiz");
+        log::error!("BRW: Surface -> ANativeWindow basarisiz");
     }
 }
 

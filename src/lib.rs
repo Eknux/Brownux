@@ -12,6 +12,7 @@ use euclid::Scale;
 use jni::objects::{JClass, JObject, JString};
 use jni::sys::{jfloat, jint, jlong};
 use jni::JNIEnv;
+use keyboard_types::Modifiers;
 use ndk::native_window::NativeWindow;
 use raw_window_handle::{DisplayHandle, HasWindowHandle};
 use servo::{
@@ -139,6 +140,7 @@ fn handle_touch(
                 s.webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
                     WheelDelta { x: dx, y: dy, z: 0.0, mode: WheelMode::DeltaPixel },
                     DevicePoint::new(x, y).into(),
+                    Modifiers::empty(),
                 )));
             }
         }
@@ -151,12 +153,12 @@ fn handle_touch(
                 )));
                 s.webview.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                     MouseButtonAction::Down,
-                    MouseButton::Left,
+                    MouseButton::Primary,
                     p.into(),
                 )));
                 s.webview.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
                     MouseButtonAction::Up,
-                    MouseButton::Left,
+                    MouseButton::Primary,
                     p.into(),
                 )));
             }

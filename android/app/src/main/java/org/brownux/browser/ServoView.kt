@@ -18,21 +18,19 @@ class ServoView @JvmOverloads constructor(
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {
-        servoPtr = jni.nativeInit()
-        loadUrl("https://servo.org") // Test için başlangıç sayfası
+        if (servoPtr == 0L) servoPtr = jni.nativeInit()
+        loadUrl("https://servo.org")
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        // Yüzey boyutu değişiklikleri
+        if (servoPtr != 0L) jni.nativeSurfaceChanged(servoPtr, holder.surface, width, height)
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
-        // Temizlik işlemleri
+        if (servoPtr != 0L) jni.nativeSurfaceDestroyed(servoPtr)
     }
 
     fun loadUrl(url: String) {
-        if (servoPtr != 0L) {
-            jni.nativeLoadUrl(servoPtr, url)
-        }
+        if (servoPtr != 0L) jni.nativeLoadUrl(servoPtr, url)
     }
 }

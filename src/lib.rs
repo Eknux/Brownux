@@ -8,21 +8,29 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use dpi::PhysicalSize;
+use euclid::Scale;
 use jni::objects::{JClass, JObject, JString};
-use jni::sys::{jint, jlong};
+use jni::sys::{jfloat, jint, jlong};
 use jni::JNIEnv;
 use ndk::native_window::NativeWindow;
 use raw_window_handle::{DisplayHandle, HasWindowHandle};
 use servo::{
-    EventLoopWaker, RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder,
-    WebViewDelegate, WindowRenderingContext,
+    EventLoopWaker, InputEvent, MouseButton, MouseButtonAction, MouseButtonEvent, MouseMoveEvent,
+    RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder, WebViewDelegate, WheelDelta,
+    WheelEvent, WheelMode, WindowRenderingContext,
 };
 use url::Url;
+use webrender_api::units::DevicePoint;
+
+// Kaydirma ters giderse -1.0 yap
+const SCROLL_SIGN: f64 = 1.0;
+const TOUCH_SLOP: f32 = 16.0;
 
 enum Cmd {
-    Surface(NativeWindow, u32, u32),
+    Surface(NativeWindow, u32, u32, f32),
     Resize(u32, u32),
     Load(String),
+    Touch(i32, f32, f32),
     Destroy,
     Tick,
 }
@@ -54,7 +62,6 @@ struct Delegate {
 
 impl WebViewDelegate for Delegate {
     fn notify_new_frame_ready(&self, _: WebView) {
-        log::info!("BRW: frame ready");
         self.dirty.set(true);
     }
 }
@@ -67,7 +74,14 @@ struct State {
     _window: NativeWindow,
 }
 
-fn create(window: NativeWindow, w: u32, h: u32, url: &str, tx: &Sender<Cmd>) -> Option<State> {
+fn create(
+    window: NativeWindow,
+    w: u32,
+    h: u32,
+    scale: f32,
+    url: &str,
+    tx: &Sender<Cmd>,
+) -> Option<State> {
     let size = PhysicalSize::new(w, h);
     let rc = {
         let wh = window.window_handle().ok()?;
@@ -80,38 +94,92 @@ fn create(window: NativeWindow, w: u32, h: u32, url: &str, tx: &Sender<Cmd>) -> 
         }
     };
     let _ = rc.make_current();
-    log::info!("BRW: rendering context hazir");
 
     let servo = ServoBuilder::default()
         .event_loop_waker(Box::new(Waker(tx.clone())))
         .build();
-    log::info!("BRW: servo hazir");
 
     let dirty = Rc::new(Cell::new(false));
     let webview = WebViewBuilder::new(&servo, rc.clone())
         .url(Url::parse(url).ok()?)
+        .hidpi_scale_factor(Scale::new(scale))
         .delegate(Rc::new(Delegate { dirty: dirty.clone() }))
         .build();
-    log::info!("BRW: webview hazir, url={}", url);
+    log::info!("BRW: webview hazir, url={}, scale={}", url, scale);
 
     Some(State { webview, servo, rc, dirty, _window: window })
+}
+
+fn handle_touch(
+    s: &State,
+    action: i32,
+    x: f32,
+    y: f32,
+    start: &mut (f32, f32),
+    last: &mut (f32, f32),
+    moved: &mut bool,
+) {
+    match action {
+        0 => {
+            *start = (x, y);
+            *last = (x, y);
+            *moved = false;
+        }
+        2 => {
+            if !*moved {
+                let (dx, dy) = (x - start.0, y - start.1);
+                if dx * dx + dy * dy > TOUCH_SLOP * TOUCH_SLOP {
+                    *moved = true;
+                }
+            }
+            if *moved {
+                let dx = (x - last.0) as f64 * SCROLL_SIGN;
+                let dy = (y - last.1) as f64 * SCROLL_SIGN;
+                *last = (x, y);
+                s.webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                    WheelDelta { x: dx, y: dy, z: 0.0, mode: WheelMode::DeltaPixel },
+                    DevicePoint::new(x, y).into(),
+                )));
+            }
+        }
+        1 => {
+            if !*moved {
+                log::info!("BRW: tap {} {}", x, y);
+                let p = DevicePoint::new(x, y);
+                s.webview.notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
+                    p.into(),
+                )));
+                s.webview.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
+                    MouseButtonAction::Down,
+                    MouseButton::Left,
+                    p.into(),
+                )));
+                s.webview.notify_input_event(InputEvent::MouseButton(MouseButtonEvent::new(
+                    MouseButtonAction::Up,
+                    MouseButton::Left,
+                    p.into(),
+                )));
+            }
+        }
+        _ => {}
+    }
 }
 
 fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
     let mut state: Option<State> = None;
     let mut url = String::from("https://servo.org");
-    let mut ticks: u64 = 0;
+    let mut t_start = (0f32, 0f32);
+    let mut t_last = (0f32, 0f32);
+    let mut t_moved = false;
 
     loop {
         match rx.recv_timeout(Duration::from_millis(16)) {
-            Ok(Cmd::Surface(win, w, h)) => {
-                log::info!("BRW: surface {}x{}", w, h);
+            Ok(Cmd::Surface(win, w, h, scale)) => {
                 state = None;
-                state = create(win, w, h, &url, &tx);
+                state = create(win, w, h, scale, &url, &tx);
                 log::info!("BRW: state olustu = {}", state.is_some());
             }
             Ok(Cmd::Resize(w, h)) => {
-                log::info!("BRW: resize {}x{}", w, h);
                 if let Some(s) = &state {
                     let size = PhysicalSize::new(w, h);
                     s.rc.resize(size);
@@ -127,6 +195,11 @@ fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
                     }
                 }
             }
+            Ok(Cmd::Touch(action, x, y)) => {
+                if let Some(s) = &state {
+                    handle_touch(s, action, x, y, &mut t_start, &mut t_last, &mut t_moved);
+                }
+            }
             Ok(Cmd::Destroy) => {
                 log::info!("BRW: destroy");
                 state = None;
@@ -136,17 +209,11 @@ fn run(rx: Receiver<Cmd>, tx: Sender<Cmd>) {
             Err(RecvTimeoutError::Disconnected) => break,
         }
 
-        ticks += 1;
-        if ticks % 120 == 0 {
-            log::info!("BRW: dongu canli, tick {}", ticks);
-        }
-
         if let Some(s) = &state {
             s.servo.spin_event_loop();
             if s.dirty.replace(false) {
                 s.webview.paint();
                 s.rc.present();
-                log::info!("BRW: paint+present");
             }
         }
     }
@@ -193,6 +260,18 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeLoadUrl(
 }
 
 #[no_mangle]
+pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeTouch(
+    _env: JNIEnv,
+    _class: JClass,
+    _servo_ptr: jlong,
+    action: jint,
+    x: jfloat,
+    y: jfloat,
+) {
+    send(Cmd::Touch(action, x, y));
+}
+
+#[no_mangle]
 pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeSurfaceChanged(
     env: JNIEnv,
     _class: JClass,
@@ -200,6 +279,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeSurfaceChanged(
     surface: JObject,
     width: jint,
     height: jint,
+    density: jfloat,
 ) {
     let (w, h) = (width.max(1) as u32, height.max(1) as u32);
 
@@ -213,7 +293,7 @@ pub extern "system" fn Java_org_brownux_browser_JNIServo_nativeSurfaceChanged(
     };
     if let Some(window) = window {
         HAS_SURFACE.store(true, Ordering::SeqCst);
-        send(Cmd::Surface(window, w, h));
+        send(Cmd::Surface(window, w, h, density));
     } else {
         log::error!("BRW: Surface -> ANativeWindow basarisiz");
     }

@@ -7,6 +7,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+webrender_api = "0.70"
+euclid = "0.22"
 url = "2"
 dpi = "0.1"
 raw-window-handle = "0.6"
